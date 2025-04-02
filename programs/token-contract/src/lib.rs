@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Mint, Token};
+use anchor_spl::token::{Mint, Token};
 
 declare_id!("GXRnCXCjonoPUUh1qGfZoxYFtZMrxPbTCZskq5B7qGhp");
 
@@ -13,20 +13,8 @@ pub mod token_contract {
         symbol: String,
         decimals: u8,
     ) -> Result<()> {
-        // Create the mint account
-        token::initialize_mint(
-            CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
-                token::InitializeMint {
-                    mint: ctx.accounts.mint.to_account_info(),
-                    rent: ctx.accounts.rent.to_account_info(),
-                },
-            ),
-            decimals,
-            ctx.accounts.payer.key,
-            Some(ctx.accounts.payer.key),
-        )?;
-
+        // Mint initialization is handled by Anchor's constraints
+        
         // Store token metadata
         let token_info = &mut ctx.accounts.token_info;
         token_info.mint = ctx.accounts.mint.key();
@@ -48,10 +36,9 @@ pub struct CreateToken<'info> {
 
     #[account(
         init,
-        seeds = [b"mint", payer.key().as_ref()],
-        bump,
         payer = payer,
-        space = 82
+        mint::decimals = decimals,
+        mint::authority = payer,
     )]
     pub mint: Account<'info, Mint>,
 
@@ -64,7 +51,6 @@ pub struct CreateToken<'info> {
 
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
-    pub rent: Sysvar<'info, Rent>,
 }
 
 #[account]

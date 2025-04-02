@@ -1,31 +1,28 @@
 import * as anchor from '@coral-xyz/anchor';
 import { Program } from '@coral-xyz/anchor';
 import { TokenContract } from '../target/types/token_contract';
-import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY } from '@solana/web3.js';
-import {
-  TOKEN_PROGRAM_ID,
-  createMint,
-  getAssociatedTokenAddress,
-} from '@solana/spl-token';
+import { PublicKey, SystemProgram } from '@solana/web3.js';
+import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { assert } from 'chai';
+import { AssertionError } from 'assert';
 
 describe('token-contract', () => {
   // Configure the client to use the local cluster.
-  anchor.setProvider(anchor.AnchorProvider.env());
-
-  const program = anchor.workspace.tokenContract as Program<TokenContract>;
   const provider = anchor.AnchorProvider.env();
+  anchor.setProvider(provider);
+
+  const program = anchor.workspace.TokenContract as Program<TokenContract>;
   const wallet = provider.wallet;
 
   it('Creates a new token', async () => {
-    // Generate a new keypair for the mint account
-    const mintKeypair = anchor.web3.Keypair.generate();
-    const tokenInfoKeypair = anchor.web3.Keypair.generate();
-
     // Create test data
     const name = 'Test Token';
     const symbol = 'TEST';
     const decimals = 9;
+
+    // Generate keypairs for accounts
+    const mintKeypair = anchor.web3.Keypair.generate();
+    const tokenInfoKeypair = anchor.web3.Keypair.generate();
 
     try {
       // Create the token
@@ -37,7 +34,6 @@ describe('token-contract', () => {
           tokenInfo: tokenInfoKeypair.publicKey,
           systemProgram: SystemProgram.programId,
           tokenProgram: TOKEN_PROGRAM_ID,
-          rent: SYSVAR_RENT_PUBKEY,
         })
         .signers([mintKeypair, tokenInfoKeypair])
         .rpc();
@@ -56,7 +52,6 @@ describe('token-contract', () => {
       assert.equal(tokenInfo.authority.toBase58(), wallet.publicKey.toBase58());
       assert.equal(tokenInfo.mint.toBase58(), mintKeypair.publicKey.toBase58());
 
-      console.log('Token created successfully!');
     } catch (error) {
       console.error('Error creating token:', error);
       throw error;
@@ -64,33 +59,37 @@ describe('token-contract', () => {
   });
 
   it('Fails to create token with invalid decimals', async () => {
+    const invalidDecimals = 10; // More than 9 decimals
     const mintKeypair = anchor.web3.Keypair.generate();
     const tokenInfoKeypair = anchor.web3.Keypair.generate();
 
     try {
       await program.methods
-        .createToken('Test Token', 'TEST', 10) // Invalid decimals > 9
+        .createToken('Test Token', 'TEST', invalidDecimals)
         .accounts({
           payer: wallet.publicKey,
           mint: mintKeypair.publicKey,
           tokenInfo: tokenInfoKeypair.publicKey,
           systemProgram: SystemProgram.programId,
           tokenProgram: TOKEN_PROGRAM_ID,
-          rent: SYSVAR_RENT_PUBKEY,
         })
         .signers([mintKeypair, tokenInfoKeypair])
         .rpc();
 
-      // If we reach here, the test should fail
       assert.fail('Should have failed with invalid decimals');
     } catch (error) {
-      // Test passed because it failed as expected
-      console.log('Test passed: Failed to create token with invalid decimals');
+      if (error instanceof AssertionError) {
+        console.log(
+          'error',
+          error
+        );
+        assert.equal(error.message, 'Should have failed with invalid decimals');
+      }
     }
   });
 
   it('Creates multiple tokens', async () => {
-    // Create first token
+    // First token
     const mint1Keypair = anchor.web3.Keypair.generate();
     const tokenInfo1Keypair = anchor.web3.Keypair.generate();
 
@@ -102,12 +101,11 @@ describe('token-contract', () => {
         tokenInfo: tokenInfo1Keypair.publicKey,
         systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
-        rent: SYSVAR_RENT_PUBKEY,
       })
       .signers([mint1Keypair, tokenInfo1Keypair])
       .rpc();
 
-    // Create second token
+    // Second token
     const mint2Keypair = anchor.web3.Keypair.generate();
     const tokenInfo2Keypair = anchor.web3.Keypair.generate();
 
@@ -119,7 +117,6 @@ describe('token-contract', () => {
         tokenInfo: tokenInfo2Keypair.publicKey,
         systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
-        rent: SYSVAR_RENT_PUBKEY,
       })
       .signers([mint2Keypair, tokenInfo2Keypair])
       .rpc();
@@ -133,9 +130,9 @@ describe('token-contract', () => {
     );
 
     assert.equal(tokenInfo1.name, 'First Token');
+    assert.equal(tokenInfo1.symbol, 'FTK');
     assert.equal(tokenInfo2.name, 'Second Token');
+    assert.equal(tokenInfo2.symbol, 'STK');
     assert.notEqual(tokenInfo1.mint.toBase58(), tokenInfo2.mint.toBase58());
-
-    console.log('Multiple tokens created successfully!');
   });
 });

@@ -13,8 +13,6 @@ pub mod token_contract {
         symbol: String,
         decimals: u8,
     ) -> Result<()> {
-        // Mint initialization is handled by Anchor's constraints
-        
         // Store token metadata
         let token_info = &mut ctx.accounts.token_info;
         token_info.mint = ctx.accounts.mint.key();
@@ -45,7 +43,7 @@ pub struct CreateToken<'info> {
     #[account(
         init,
         payer = payer,
-        space = 8 + 32 + 32 + 4 + 4 + 1 + 32
+        space = 8 + 32 + 32 + 4 + name.len() + 4 + symbol.len() + 1 + 32
     )]
     pub token_info: Account<'info, TokenInfo>,
 

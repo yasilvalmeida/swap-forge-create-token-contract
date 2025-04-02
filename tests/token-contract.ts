@@ -1,8 +1,6 @@
 import * as anchor from '@coral-xyz/anchor';
 import { Program } from '@coral-xyz/anchor';
 import { TokenContract } from '../target/types/token_contract';
-import { PublicKey, SystemProgram } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { assert } from 'chai';
 import { AssertionError } from 'assert';
 
@@ -32,8 +30,6 @@ describe('token-contract', () => {
           payer: wallet.publicKey,
           mint: mintKeypair.publicKey,
           tokenInfo: tokenInfoKeypair.publicKey,
-          systemProgram: SystemProgram.programId,
-          tokenProgram: TOKEN_PROGRAM_ID,
         })
         .signers([mintKeypair, tokenInfoKeypair])
         .rpc();
@@ -70,8 +66,6 @@ describe('token-contract', () => {
           payer: wallet.publicKey,
           mint: mintKeypair.publicKey,
           tokenInfo: tokenInfoKeypair.publicKey,
-          systemProgram: SystemProgram.programId,
-          tokenProgram: TOKEN_PROGRAM_ID,
         })
         .signers([mintKeypair, tokenInfoKeypair])
         .rpc();
@@ -79,10 +73,7 @@ describe('token-contract', () => {
       assert.fail('Should have failed with invalid decimals');
     } catch (error) {
       if (error instanceof AssertionError) {
-        console.log(
-          'error',
-          error
-        );
+        console.log('error', error);
         assert.equal(error.message, 'Should have failed with invalid decimals');
       }
     }
@@ -99,8 +90,6 @@ describe('token-contract', () => {
         payer: wallet.publicKey,
         mint: mint1Keypair.publicKey,
         tokenInfo: tokenInfo1Keypair.publicKey,
-        systemProgram: SystemProgram.programId,
-        tokenProgram: TOKEN_PROGRAM_ID,
       })
       .signers([mint1Keypair, tokenInfo1Keypair])
       .rpc();
@@ -115,8 +104,6 @@ describe('token-contract', () => {
         payer: wallet.publicKey,
         mint: mint2Keypair.publicKey,
         tokenInfo: tokenInfo2Keypair.publicKey,
-        systemProgram: SystemProgram.programId,
-        tokenProgram: TOKEN_PROGRAM_ID,
       })
       .signers([mint2Keypair, tokenInfo2Keypair])
       .rpc();

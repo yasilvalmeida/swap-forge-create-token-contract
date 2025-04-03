@@ -1,7 +1,8 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Mint, Token, TokenAccount};
+use anchor_spl::token::{self, Mint, Token, TokenAccount, SetAuthority};
+use anchor_spl::token::spl_token::instruction::AuthorityType;
 use mpl_token_metadata::{
-    instructions::CreateV1Builder,
+    instructions::{CreateV1Builder, UpdateV1Builder},
     types::{TokenStandard},
 };
 
@@ -18,9 +19,10 @@ pub mod token_contract {
         decimals: u8,
         uri: String,
         initial_supply: u64,
+        revoke_mint: bool,
+        revoke_freeze: bool,
+        revoke_update: bool,
     ) -> Result<()> {
-        // Debug log to verify received decimals
-        msg!("Creating token with {} decimals", decimals);
         // Get the bump seed for the token account PDA
         let bump = ctx.bumps.token_account;
         let payer_key = ctx.accounts.payer.key();
@@ -32,8 +34,8 @@ pub mod token_contract {
             .mint(mint_key, false)
             .authority(payer_key)
             .payer(payer_key)
-            .update_authority(payer_key, true)
-            .is_mutable(true)
+            .update_authority(payer_key, !revoke_update)
+            .is_mutable(!revoke_update)
             .primary_sale_happened(false)
             .name(name.clone())
             .symbol(symbol.clone())
@@ -75,7 +77,6 @@ pub mod token_contract {
             },
             &signer,
         );
-        //token::initialize_account(cpi_ctx)?;
 
         // Mint initial supply to token account
         token::mint_to(
@@ -89,6 +90,60 @@ pub mod token_contract {
             ),
             initial_supply * 10u64.pow(decimals as u32),
         )?;
+
+        // Revoke update authority if requested
+        if revoke_update {
+            let null_key = Pubkey::default();
+            let update_ix = UpdateV1Builder::new()
+                .metadata(ctx.accounts.metadata.key())
+                .mint(ctx.accounts.mint.key())
+                .authority(payer_key)
+                .payer(payer_key)
+                .new_update_authority(null_key)
+                .instruction();
+
+            anchor_lang::solana_program::program::invoke(
+                &update_ix,
+                &[
+                    ctx.accounts.metadata.to_account_info(),
+                    ctx.accounts.mint.to_account_info(),
+                    ctx.accounts.payer.to_account_info(),
+                    ctx.accounts.system_program.to_account_info(),
+                    ctx.accounts.sysvar_instructions.to_account_info(),
+                    ctx.accounts.token_metadata_program.to_account_info(),
+                ],
+            )?;
+        }
+
+        // Revoke mint authority if requested
+        if revoke_mint {
+            token::set_authority(
+                CpiContext::new(
+                    ctx.accounts.token_program.to_account_info(),
+                    SetAuthority {
+                        current_authority: ctx.accounts.payer.to_account_info(),
+                        account_or_mint: ctx.accounts.mint.to_account_info(),
+                    },
+                ),
+                AuthorityType::MintTokens,
+                None,
+            )?;
+        }
+
+        // Revoke freeze authority if requested
+        if revoke_freeze {
+            token::set_authority(
+                CpiContext::new(
+                    ctx.accounts.token_program.to_account_info(),
+                    SetAuthority {
+                        current_authority: ctx.accounts.payer.to_account_info(),
+                        account_or_mint: ctx.accounts.mint.to_account_info(),
+                    },
+                ),
+                AuthorityType::FreezeAccount,
+                None,
+            )?;
+        }
 
         Ok(())
     }
@@ -105,6 +160,7 @@ pub struct CreateToken<'info> {
         payer = payer,
         mint::decimals = decimals,
         mint::authority = payer,
+        mint::freeze_authority = payer,
     )]
     pub mint: Account<'info, Mint>,
 

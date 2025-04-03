@@ -23,8 +23,8 @@ describe('token-contract', () => {
 
   it('Creates a new token with metadata', async () => {
     // Create test data
-    const name = 'Trump Tarif EU';
-    const symbol = 'TTEU';
+    const name = 'TikTok Elon Dance';
+    const symbol = 'ELINDA';
     const decimals = 9;
     const initialSupply = new anchor.BN(1000000000);
     const uri =
@@ -45,7 +45,16 @@ describe('token-contract', () => {
       );
       // Create the token
       const tx = await program.methods
-        .createToken(name, symbol, decimals, uri, initialSupply)
+        .createToken(
+          name,
+          symbol,
+          decimals,
+          uri,
+          initialSupply,
+          true,
+          true,
+          true
+        )
         .accounts({
           payer: wallet.publicKey,
           mint: mintKeypair.publicKey,

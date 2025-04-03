@@ -2635,6 +2635,7 @@ dependencies = [
  "anchor-spl",
  "mpl-token-metadata",
  "solana-instructions-sysvar",
+ "solana-program",
 ]
 
 [[package]]

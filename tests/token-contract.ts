@@ -3,9 +3,6 @@ import { Program } from '@coral-xyz/anchor';
 import { TokenContract } from '../target/types/token_contract';
 import { PublicKey, SystemProgram } from '@solana/web3.js';
 import {
-  ASSOCIATED_TOKEN_PROGRAM_ID,
-  createAssociatedTokenAccountInstruction,
-  getAssociatedTokenAddress,
   TOKEN_PROGRAM_ID,
 } from '@solana/spl-token';
 import { assert } from 'chai';
@@ -21,6 +18,33 @@ describe('token-contract', () => {
   const program = anchor.workspace.TokenContract as Program<TokenContract>;
   const wallet = provider.wallet;
 
+  // Initialize security account first
+  /* before(async () => {
+    const [securityPDA] = PublicKey.findProgramAddressSync(
+      [Buffer.from("program_security")],
+      program.programId
+    );
+
+    await program.methods.initializeSecurity()
+      .accounts({
+        authority: wallet.publicKey,
+      }).remainingAccounts([
+          {
+            pubkey: SystemProgram.programId,
+            isWritable: false,
+            isSigner: false,
+        },
+        {
+            pubkey: securityPDA,
+            isWritable: false,
+            isSigner: false,
+          },
+        ])
+      .rpc();
+
+    console.log("Security account initialized");
+  }); */
+
   it('Creates a new token with metadata', async () => {
     // Create test data
     const name = 'TikTok Elon Dance';
@@ -34,7 +58,7 @@ describe('token-contract', () => {
     const mintKeypair = anchor.web3.Keypair.generate();
 
     try {
-      // Derive the metadata account address
+      // Derive PDAs
       const [metadata] = await PublicKey.findProgramAddressSync(
         [
           Buffer.from('metadata'),
@@ -84,6 +108,14 @@ describe('token-contract', () => {
 
       console.log('Token creation transaction signature:', tx);
       assert.exists(tx);
+
+      /* // Verify security info
+      const [securityPDA] = PublicKey.findProgramAddressSync(
+        [Buffer.from("program_security")],
+        program.programId
+      );
+      const securityInfo = await program.account.programSecurity.fetch(securityPDA);
+      assert.include(securityInfo.securityTxt, "support@swapforge.app"); */
     } catch (error) {
       console.error('Error creating token:', error);
       throw error;

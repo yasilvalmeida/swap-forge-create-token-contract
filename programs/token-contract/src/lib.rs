@@ -18,30 +18,27 @@ pub mod token_contract {
 
     /// Initializes program security settings (call once after deployment)
     pub fn initialize_security(ctx: Context<InitializeSecurity>) -> Result<()> {
+        // Check if already initialized
+        if ctx.accounts.security.admin != Pubkey::default() {
+            return Err(ErrorCode::AlreadyInitialized.into());
+        }
+        
         ctx.accounts.security.admin = ctx.accounts.authority.key();
         ctx.accounts.security.security_txt = String::from(
             "Contact: support@swapforge.app\n\
-             Website: https://swapforge.app/\n\
-             Twitter: https://x.com/SwapForgeApp\n\
-             Policy: https://swapforge.app/security\n\
-             Encryption: https://swapforge.app/pgp-key.txt"
+            Website: https://swapforge.app/\n\
+            Twitter: https://x.com/SwapForgeApp\n\
+            Policy: https://swapforge.app/security\n\
+            Encryption: https://swapforge.app/pgp-key.txt"
         );
         ctx.accounts.security.last_updated = Clock::get()?.unix_timestamp;
         Ok(())
     }
 
     /// Updates security settings (admin only)
-    pub fn update_security(
-        ctx: Context<UpdateSecurity>,
-        new_content: String,
-    ) -> Result<()> {
-        require_keys_eq!(
-            ctx.accounts.authority.key(),
-            ctx.accounts.security.admin,
-            ErrorCode::Unauthorized
-        );
-        
-        ctx.accounts.security.security_txt = new_content;
+    pub fn upgrade_security(ctx: Context<UpdateSecurity>, new_txt: String) -> Result<()> {
+        ctx.accounts.security.version += 1;
+        ctx.accounts.security.security_txt = new_txt;
         ctx.accounts.security.last_updated = Clock::get()?.unix_timestamp;
         Ok(())
     }
@@ -277,6 +274,7 @@ pub struct CreateToken<'info> {
 /// Security account data
 #[account]
 pub struct ProgramSecurity {
+    pub version: u32,
     pub admin: Pubkey,           // Admin pubkey (should match DEPLOYER_PUBKEY)
     pub security_txt: String,    // security.txt content
     pub last_updated: i64,       // Unix timestamp
@@ -289,4 +287,6 @@ pub enum ErrorCode {
     Unauthorized,
     #[msg("Insufficient funds for transaction")]
     InsufficientFunds,
+    #[msg("Security account already initialized")]
+    AlreadyInitialized,
 }

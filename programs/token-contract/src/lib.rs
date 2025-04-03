@@ -95,7 +95,7 @@ pub mod token_contract {
 }
 
 #[derive(Accounts)]
-#[instruction(decimals: u8)]
+#[instruction(name: String, symbol: String, decimals: u8)]
 pub struct CreateToken<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,

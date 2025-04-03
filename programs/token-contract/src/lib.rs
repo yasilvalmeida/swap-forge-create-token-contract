@@ -1,11 +1,11 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{Mint, Token};
+use anchor_spl::token::{self, Mint, Token, TokenAccount};
 use mpl_token_metadata::{
     instructions::CreateV1Builder,
     types::{TokenStandard},
 };
 
-declare_id!("GXRnCXCjonoPUUh1qGfZoxYFtZMrxPbTCZskq5B7qGhp");
+declare_id!("AkugdJHDjDvBaxUGC6pjyrfqEpDfJ4Z9Ji9NED6Lmddg");
 
 #[program]
 pub mod token_contract {
@@ -17,14 +17,22 @@ pub mod token_contract {
         symbol: String,
         decimals: u8,
         uri: String,
+        initial_supply: u64,
     ) -> Result<()> {
+        // Debug log to verify received decimals
+        msg!("Creating token with {} decimals", decimals);
+        // Get the bump seed for the token account PDA
+        let bump = ctx.bumps.token_account;
+        let payer_key = ctx.accounts.payer.key();
+        let mint_key = ctx.accounts.mint.key();
+
         // Create metadata using CPI builder
         let create_ix = CreateV1Builder::new()
             .metadata(ctx.accounts.metadata.key())
-            .mint(ctx.accounts.mint.key(), false)
-            .authority(ctx.accounts.payer.key())
-            .payer(ctx.accounts.payer.key())
-            .update_authority(ctx.accounts.payer.key(), true)
+            .mint(mint_key, false)
+            .authority(payer_key)
+            .payer(payer_key)
+            .update_authority(payer_key, true)
             .is_mutable(true)
             .primary_sale_happened(false)
             .name(name.clone())
@@ -42,24 +50,52 @@ pub mod token_contract {
                 ctx.accounts.payer.to_account_info(),
                 ctx.accounts.system_program.to_account_info(),
                 ctx.accounts.sysvar_instructions.to_account_info(),
-                ctx.accounts.token_program.to_account_info(), // Changed from spl_token_program
+                ctx.accounts.token_program.to_account_info(), 
+                ctx.accounts.token_metadata_program.to_account_info(),
             ],
         )?;
 
-        // Store additional info
-        let token_info = &mut ctx.accounts.token_info;
-        token_info.mint = ctx.accounts.mint.key();
-        token_info.name = name;
-        token_info.symbol = symbol;
-        token_info.decimals = decimals;
-        token_info.authority = ctx.accounts.payer.key();
+        // Create token account PDA seeds
+        let seeds = &[
+            b"token-account",
+            payer_key.as_ref(),
+            mint_key.as_ref(),
+            &[bump],
+        ];
+        let signer = [&seeds[..]];
+
+        // Initialize the token account
+        let _cpi_ctx = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            token::InitializeAccount {
+                account: ctx.accounts.token_account.to_account_info(),
+                mint: ctx.accounts.mint.to_account_info(),
+                authority: ctx.accounts.payer.to_account_info(),
+                rent: ctx.accounts.rent.to_account_info(),
+            },
+            &signer,
+        );
+        //token::initialize_account(cpi_ctx)?;
+
+        // Mint initial supply to token account
+        token::mint_to(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                token::MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.token_account.to_account_info(),
+                    authority: ctx.accounts.payer.to_account_info(),
+                },
+            ),
+            initial_supply * 10u64.pow(decimals as u32),
+        )?;
 
         Ok(())
     }
 }
 
 #[derive(Accounts)]
-#[instruction(name: String, symbol: String, decimals: u8, uri: String)]
+#[instruction(decimals: u8)]
 pub struct CreateToken<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
@@ -72,30 +108,27 @@ pub struct CreateToken<'info> {
     )]
     pub mint: Account<'info, Mint>,
 
-    #[account(
-        init,
-        payer = payer,
-        space = 8 + 32 + 32 + 4 + name.len() + 4 + symbol.len() + 1 + 32
-    )]
-    pub token_info: Account<'info, TokenInfo>,
-
     /// CHECK: Validated by CPI
     #[account(mut)]
     pub metadata: UncheckedAccount<'info>,
 
-    pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>, // This is the SPL Token program
+    /// CHECK: This is the token account we're creating
+    #[account(
+        init,
+        payer = payer,
+        seeds = [b"token-account", payer.key().as_ref(), mint.key().as_ref()],
+        bump,
+        token::mint = mint,
+        token::authority = payer,
+    )]
+    pub token_account: Account<'info, TokenAccount>,
+
+    pub rent: Sysvar<'info, Rent>,
     /// CHECK: Required by Metaplex
     pub sysvar_instructions: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+    
     /// CHECK: Metaplex program
     pub token_metadata_program: UncheckedAccount<'info>,
-}
-
-#[account]
-pub struct TokenInfo {
-    pub mint: Pubkey,
-    pub name: String,
-    pub symbol: String,
-    pub decimals: u8,
-    pub authority: Pubkey,
+    pub token_program: Program<'info, Token>,
 }

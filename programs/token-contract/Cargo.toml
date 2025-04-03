@@ -21,3 +21,4 @@ idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 anchor-lang = "0.31.0"
 anchor-spl = "0.31.0"
 mpl-token-metadata = "5.1.0"
+solana-instructions-sysvar = "=2.2.1"

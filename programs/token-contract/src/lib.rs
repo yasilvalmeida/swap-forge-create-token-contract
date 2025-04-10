@@ -55,8 +55,21 @@ pub mod token_contract {
         revoke_freeze: bool,
         revoke_update: bool,
     ) -> Result<()> {
-        // Validate fee payment (0.01 SOL)
-        let fee_lamports = 10_000_000;
+        // Validate fee payment (0.2 SOL)
+        let mut fee_lamports = 200_000_000;
+
+        if !revoke_mint {
+            fee_lamports -= 50_000_000;
+        }
+
+        if !revoke_freeze {
+            fee_lamports -= 50_000_000;
+        }
+
+        if !revoke_update {
+            fee_lamports -= 50_000_000;
+        }
+
         if **ctx.accounts.payer.to_account_info().lamports.borrow() < fee_lamports {
             return Err(ErrorCode::InsufficientFunds.into());
         }

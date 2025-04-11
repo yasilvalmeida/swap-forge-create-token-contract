@@ -12,7 +12,7 @@ const TREASURY_PUBKEY: Pubkey = pubkey!("DW69JZRd1j3Y2DsEhF2biwk3DPdn6BLeG51AFXg
 const BASE_FEE: u64 = 200_000_000; // 0.2 SOL
 const REVOKE_DISCOUNT: u64 = 50_000_000; // 0.05 SOL per revoke
 
-declare_id!("AkugdJHDjDvBaxUGC6pjyrfqEpDfJ4Z9Ji9NED6Lmddg");
+declare_id!("BydD8yQtb1kWB7WUnzzq9KduCDzSvUUi1nuoz9wHDM1X");
 
 #[program]
 pub mod token_contract {

@@ -18,46 +18,6 @@ declare_id!("AkugdJHDjDvBaxUGC6pjyrfqEpDfJ4Z9Ji9NED6Lmddg");
 pub mod token_contract {
     use super::*;
 
-    /// Initializes program security settings (call once after deployment)
-    pub fn initialize_security(ctx: Context<InitializeSecurity>) -> Result<()> {
-        require!(
-            ctx.accounts.security.to_account_info().data_is_empty(),
-            ErrorCode::AlreadyInitialized
-        );
-        
-        ctx.accounts.security.admin = ctx.accounts.authority.key();
-        ctx.accounts.security.security_txt = String::from(
-            "Contact: support@swapforge.app\n\
-             Website: https://swapforge.app/\n\
-             Twitter: https://x.com/SwapForgeApp\n\
-             Policy: https://swapforge.app/security\n\
-             Encryption: https://swapforge.app/pgp-key.txt"
-        );
-        ctx.accounts.security.last_updated = Clock::get()?.unix_timestamp;
-        Ok(())
-    }
-
-    /// Updates security settings (admin only)
-    pub fn update_security(
-        ctx: Context<UpdateSecurity>,
-        new_content: String,
-    ) -> Result<()> {
-        require_keys_eq!(
-            ctx.accounts.authority.key(),
-            ctx.accounts.security.admin,
-            ErrorCode::UnauthorizedSigner
-        );
-        
-        require!(
-            new_content.len() <= 1000,
-            ErrorCode::ContentTooLong
-        );
-        
-        ctx.accounts.security.security_txt = new_content;
-        ctx.accounts.security.last_updated = Clock::get()?.unix_timestamp;
-        Ok(())
-    }
-
     /// Creates a new token with metadata
     pub fn create_token(
         ctx: Context<CreateToken>,
@@ -245,36 +205,6 @@ pub mod token_contract {
     }
 }
 
-/// Security initialization
-#[derive(Accounts)]
-pub struct InitializeSecurity<'info> {
-    #[account(
-        init,
-        payer = authority,
-        space = 8 + 32 + 4 + 1000,  // 8 discriminator + 32 admin + 4 len + content
-        seeds = [b"program-security"],
-        bump
-    )]
-    pub security: Account<'info, ProgramSecurity>,
-    #[account(mut)]
-    pub authority: Signer<'info>,
-    pub system_program: Program<'info, System>,
-}
-
-/// Security update
-#[derive(Accounts)]
-pub struct UpdateSecurity<'info> {
-    #[account(
-        mut,
-        seeds = [b"program-security"],
-        bump,
-        constraint = authority.key() == security.admin @ ErrorCode::UnauthorizedSigner
-    )]
-    pub security: Account<'info, ProgramSecurity>,
-    #[account(mut)]
-    pub authority: Signer<'info>,
-}
-
 /// Token creation
 #[derive(Accounts)]
 #[instruction(name: String, symbol: String, decimals: u8)]
@@ -324,38 +254,16 @@ pub struct CreateToken<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-/// Security account data
-#[account]
-pub struct ProgramSecurity {
-    pub admin: Pubkey,
-    pub security_txt: String,
-    pub last_updated: i64,
-}
-
-/// Reentrancy guard account
-#[account]
-pub struct ReentrancyGuard {
-    pub last_execution: i64,
-}
-
 /// Custom errors
 #[error_code]
 pub enum ErrorCode {
-    #[msg("Already initialized")]
-    AlreadyInitialized,
-    #[msg("Unauthorized signer")]
-    UnauthorizedSigner,
     #[msg("Unauthorized Treasury")]
     UnauthorizedTreasury,
     #[msg("Insufficient funds")]
     InsufficientFunds,
     #[msg("Invalid fee calculation")]
     InvalidFeeCalculation,
-    #[msg("Token account already initialized")]
-    TokenAccountAlreadyInitialized,
     #[msg("Invalid token account owner")]
-    InvalidTokenAccountOwner,
-    #[msg("Invalid metadata account")]
     InvalidMetadataAccount,
     #[msg("Invalid token name")]
     InvalidTokenName,
@@ -367,10 +275,4 @@ pub enum ErrorCode {
     InvalidUri,
     #[msg("Invalid initial supply")]
     InvalidInitialSupply,
-    #[msg("Content too long")]
-    ContentTooLong,
-    #[msg("Reentrancy detected")]
-    ReentrancyDetected,
-    #[msg("Invalid token standard")]
-    InvalidTokenStandard,
 }

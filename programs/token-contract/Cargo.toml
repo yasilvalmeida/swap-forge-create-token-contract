@@ -24,3 +24,5 @@ mpl-token-metadata = "5.1.0"
 # Size optimizers
 borsh = { version = "0.10", optional = true }
 arrayref = "0.3.7"
+# Security
+solana-security-txt = "1.1.1"

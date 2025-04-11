@@ -2636,6 +2636,7 @@ dependencies = [
  "arrayref",
  "borsh 0.10.4",
  "mpl-token-metadata",
+ "solana-security-txt",
 ]
 
 [[package]]

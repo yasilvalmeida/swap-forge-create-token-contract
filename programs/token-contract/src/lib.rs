@@ -6,6 +6,7 @@ use mpl_token_metadata::{
     instructions::{CreateV1Builder, UpdateV1Builder},
     types::TokenStandard,
 };
+use solana_security_txt::security_txt;
 
 // Constants
 const TREASURY_PUBKEY: Pubkey = pubkey!("DW69JZRd1j3Y2DsEhF2biwk3DPdn6BLeG51AFXg18ho2");
@@ -13,6 +14,17 @@ const BASE_FEE: u64 = 200_000_000; // 0.2 SOL
 const REVOKE_DISCOUNT: u64 = 50_000_000; // 0.05 SOL per revoke
 
 declare_id!("BydD8yQtb1kWB7WUnzzq9KduCDzSvUUi1nuoz9wHDM1X");
+
+security_txt! {
+    name: "Swapforge Token Contract",
+    project_url: "https://swapforge.app/",
+    contacts: "email:support@swapforge.app, link:https://github.com/yasilvalmeida/swap-forge-create-token-contract",
+    policy: "https://swapforge.app/policy",
+    source_code: "https://github.com/yasilvalmeida/swap-forge-create-token-contract",
+    acknowledgements: "https://swapforge.app/acknowledgements",
+    preferred_languages: "en",
+    auditors: "None"
+}
 
 #[program]
 pub mod token_contract {

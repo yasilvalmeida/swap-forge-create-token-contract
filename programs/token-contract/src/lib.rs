@@ -7,8 +7,10 @@ use mpl_token_metadata::{
     types::TokenStandard,
 };
 
-// Constant deployer public key
+// Constants
 const TREASURY_PUBKEY: Pubkey = pubkey!("DW69JZRd1j3Y2DsEhF2biwk3DPdn6BLeG51AFXg18ho2");
+const BASE_FEE: u64 = 200_000_000; // 0.2 SOL
+const REVOKE_DISCOUNT: u64 = 50_000_000; // 0.05 SOL per revoke
 
 declare_id!("AkugdJHDjDvBaxUGC6pjyrfqEpDfJ4Z9Ji9NED6Lmddg");
 
@@ -18,6 +20,11 @@ pub mod token_contract {
 
     /// Initializes program security settings (call once after deployment)
     pub fn initialize_security(ctx: Context<InitializeSecurity>) -> Result<()> {
+        require!(
+            ctx.accounts.security.to_account_info().data_is_empty(),
+            ErrorCode::AlreadyInitialized
+        );
+        
         ctx.accounts.security.admin = ctx.accounts.authority.key();
         ctx.accounts.security.security_txt = String::from(
             "Contact: support@swapforge.app\n\
@@ -41,6 +48,11 @@ pub mod token_contract {
             ErrorCode::UnauthorizedSigner
         );
         
+        require!(
+            new_content.len() <= 1000,
+            ErrorCode::ContentTooLong
+        );
+        
         ctx.accounts.security.security_txt = new_content;
         ctx.accounts.security.last_updated = Clock::get()?.unix_timestamp;
         Ok(())
@@ -58,18 +70,26 @@ pub mod token_contract {
         revoke_freeze: bool,
         revoke_update: bool,
     ) -> Result<()> {
-        // Validate fee payment (0.20 SOL)
-        let mut fee_lamports = 200_000_000;
-        // Substract fee according with revoke flags
-        if !revoke_mint { fee_lamports -= 50_000_000 }
-        if !revoke_freeze { fee_lamports -= 50_000_000 }
-        if !revoke_update { fee_lamports -= 50_000_000 }
+        // Input validation
+        require!(!name.is_empty() && name.len() <= 32, ErrorCode::InvalidTokenName);
+        require!(!symbol.is_empty() && symbol.len() <= 10, ErrorCode::InvalidTokenSymbol);
+        require!(decimals <= 18, ErrorCode::InvalidDecimals);
+        require!(!uri.is_empty(), ErrorCode::InvalidUri);
+        require!(initial_supply > 0, ErrorCode::InvalidInitialSupply);
 
-        if **ctx.accounts.payer.to_account_info().lamports.borrow() < fee_lamports {
-            return Err(ErrorCode::InsufficientFunds.into());
-        }
+        // Fee calculation with overflow protection
+        let fee_lamports = BASE_FEE
+            .checked_sub(if !revoke_mint { REVOKE_DISCOUNT } else { 0 })
+            .and_then(|v| v.checked_sub(if !revoke_freeze { REVOKE_DISCOUNT } else { 0 }))
+            .and_then(|v| v.checked_sub(if !revoke_update { REVOKE_DISCOUNT } else { 0 }))
+            .ok_or(ErrorCode::InvalidFeeCalculation)?;
 
-        // Transfer fee to deployer
+        require!(
+            **ctx.accounts.payer.to_account_info().lamports.borrow() >= fee_lamports,
+            ErrorCode::InsufficientFunds
+        );
+
+        // Transfer fee to treasury
         let transfer_ix = system_instruction::transfer(
             &ctx.accounts.payer.key(),
             &TREASURY_PUBKEY,
@@ -84,11 +104,29 @@ pub mod token_contract {
             ],
         )?;
 
-        // Token creation logic (unchanged from your original)
+        // Token creation
         let bump = ctx.bumps.token_account;
         let payer_key = ctx.accounts.payer.key();
         let mint_key = ctx.accounts.mint.key();
 
+        // Validate metadata account
+        let binding = ctx.accounts.token_metadata_program.key();
+        let metadata_seeds = &[
+            b"metadata",
+            binding.as_ref(),
+            mint_key.as_ref(),
+        ];
+        let (expected_metadata_key, _) = Pubkey::find_program_address(
+            metadata_seeds,
+            &ctx.accounts.token_metadata_program.key()
+        );
+        require_keys_eq!(
+            ctx.accounts.metadata.key(),
+            expected_metadata_key,
+            ErrorCode::InvalidMetadataAccount
+        );
+
+        // Create metadata
         let create_ix = CreateV1Builder::new()
             .metadata(ctx.accounts.metadata.key())
             .mint(mint_key, false)
@@ -128,14 +166,14 @@ pub mod token_contract {
 
         // Initialize the token account
         let _cpi_ctx = CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            token::InitializeAccount {
-                account: ctx.accounts.token_account.to_account_info(),
-                mint: ctx.accounts.mint.to_account_info(),
-                authority: ctx.accounts.payer.to_account_info(),
-                rent: ctx.accounts.rent.to_account_info(),
-            },
-            &signer,
+                ctx.accounts.token_program.to_account_info(),
+                token::InitializeAccount {
+                    account: ctx.accounts.token_account.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                    authority: ctx.accounts.payer.to_account_info(),
+                    rent: ctx.accounts.rent.to_account_info(),
+                },
+                &signer,
         );
 
         // Mint initial supply
@@ -148,7 +186,8 @@ pub mod token_contract {
                     authority: ctx.accounts.payer.to_account_info(),
                 },
             ),
-            initial_supply * 10u64.pow(decimals as u32),
+            initial_supply.checked_mul(10u64.pow(decimals as u32))
+                .ok_or(ErrorCode::InvalidInitialSupply)?,
         )?;
 
         // Revoke authorities if requested
@@ -259,11 +298,10 @@ pub struct CreateToken<'info> {
     )]
     pub mint: Account<'info, Mint>,
 
-    /// CHECK: Validated by CPI
+    /// CHECK: Validated in instruction
     #[account(mut)]
     pub metadata: UncheckedAccount<'info>,
 
-    /// CHECK: This is the token account we're creating
     #[account(
         init,
         payer = payer,
@@ -276,10 +314,12 @@ pub struct CreateToken<'info> {
 
     pub rent: Sysvar<'info, Rent>,
     /// CHECK: Required by Metaplex
+    #[account(address = anchor_lang::solana_program::sysvar::instructions::ID)]
     pub sysvar_instructions: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
     
     /// CHECK: Metaplex program
+    #[account(address = mpl_token_metadata::ID)]
     pub token_metadata_program: UncheckedAccount<'info>,
     pub token_program: Program<'info, Token>,
 }
@@ -287,18 +327,50 @@ pub struct CreateToken<'info> {
 /// Security account data
 #[account]
 pub struct ProgramSecurity {
-    pub admin: Pubkey,           // Admin pubkey (should match DEPLOYER_PUBKEY)
-    pub security_txt: String,    // security.txt content
-    pub last_updated: i64,       // Unix timestamp
+    pub admin: Pubkey,
+    pub security_txt: String,
+    pub last_updated: i64,
+}
+
+/// Reentrancy guard account
+#[account]
+pub struct ReentrancyGuard {
+    pub last_execution: i64,
 }
 
 /// Custom errors
 #[error_code]
 pub enum ErrorCode {
-    #[msg("UnauthorizedSigner: Signer does not have admin privileges")]
+    #[msg("Already initialized")]
+    AlreadyInitialized,
+    #[msg("Unauthorized signer")]
     UnauthorizedSigner,
-    #[msg("UnauthorizedTreasury: Treasury account don't match")]
+    #[msg("Unauthorized Treasury")]
     UnauthorizedTreasury,
-    #[msg("Insufficient funds for transaction")]
+    #[msg("Insufficient funds")]
     InsufficientFunds,
+    #[msg("Invalid fee calculation")]
+    InvalidFeeCalculation,
+    #[msg("Token account already initialized")]
+    TokenAccountAlreadyInitialized,
+    #[msg("Invalid token account owner")]
+    InvalidTokenAccountOwner,
+    #[msg("Invalid metadata account")]
+    InvalidMetadataAccount,
+    #[msg("Invalid token name")]
+    InvalidTokenName,
+    #[msg("Invalid token symbol")]
+    InvalidTokenSymbol,
+    #[msg("Invalid decimals")]
+    InvalidDecimals,
+    #[msg("Invalid URI")]
+    InvalidUri,
+    #[msg("Invalid initial supply")]
+    InvalidInitialSupply,
+    #[msg("Content too long")]
+    ContentTooLong,
+    #[msg("Reentrancy detected")]
+    ReentrancyDetected,
+    #[msg("Invalid token standard")]
+    InvalidTokenStandard,
 }

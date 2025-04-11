@@ -1,10 +1,7 @@
 import * as anchor from '@coral-xyz/anchor';
 import { Program } from '@coral-xyz/anchor';
 import { TokenContract } from '../target/types/token_contract';
-import { PublicKey, SystemProgram } from '@solana/web3.js';
-import {
-  TOKEN_PROGRAM_ID,
-} from '@solana/spl-token';
+import { PublicKey, Keypair, Transaction } from '@solana/web3.js';
 import { assert } from 'chai';
 
 const TOKEN_METADATA_PROGRAM_ID = new PublicKey(
@@ -28,7 +25,7 @@ describe('token-contract', () => {
       'https://coffee-defensive-hare-118.mypinata.cloud/ipfs/bafkreihxjp3wqvmnvtuqgicoyx6whie2x7uh4p3cnj4hjpmmsjoandufve';
 
     // Generate keypair for mint
-    const mintKeypair = anchor.web3.Keypair.generate();
+    const mintKeypair = Keypair.generate();
 
     try {
       // Derive PDAs
@@ -40,7 +37,8 @@ describe('token-contract', () => {
         ],
         TOKEN_METADATA_PROGRAM_ID
       );
-      // Create the token
+
+      // Build the transaction
       const tx = await program.methods
         .createToken(
           name,
@@ -56,31 +54,33 @@ describe('token-contract', () => {
           payer: wallet.publicKey,
           mint: mintKeypair.publicKey,
           metadata,
-          sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
-          tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
         })
-        .remainingAccounts([
-          {
-            pubkey: SystemProgram.programId,
-            isWritable: false,
-            isSigner: false,
-          },
-          {
-            pubkey: anchor.web3.SYSVAR_RENT_PUBKEY,
-            isWritable: false,
-            isSigner: false,
-          },
-          {
-            pubkey: TOKEN_PROGRAM_ID,
-            isWritable: false,
-            isSigner: false,
-          },
-        ])
-        .signers([mintKeypair])
-        .rpc();
+        .transaction();
 
-      console.log('Token creation transaction signature:', tx);
-      assert.exists(tx);
+      // Set transaction parameters
+      tx.feePayer = wallet.publicKey;
+      tx.recentBlockhash = (await provider.connection.getRecentBlockhash()).blockhash;
+      
+      // Sign the transaction
+      tx.sign(wallet.payer!, mintKeypair);
+
+      // Send and confirm the transaction
+      const rawTransaction = tx.serialize();
+      const txSignature = await provider.connection.sendRawTransaction(rawTransaction);
+      
+      const latestBlockHash = await provider.connection.getLatestBlockhash();
+      await provider.connection.confirmTransaction({
+        signature: txSignature,
+        blockhash: latestBlockHash.blockhash,
+        lastValidBlockHeight: latestBlockHash.lastValidBlockHeight,
+      });
+
+      console.log('Token creation transaction signature:', txSignature);
+      assert.exists(txSignature);
+
+      // Verify mint account was created
+      const mintAccount = await provider.connection.getAccountInfo(mintKeypair.publicKey);
+      assert.isNotNull(mintAccount, 'Mint account was not created');
     } catch (error) {
       console.error('Error creating token:', error);
       throw error;

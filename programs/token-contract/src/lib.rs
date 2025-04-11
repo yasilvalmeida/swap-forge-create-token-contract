@@ -8,7 +8,7 @@ use mpl_token_metadata::{
 };
 
 // Constant deployer public key
-const DEPLOYER_PUBKEY: Pubkey = pubkey!("6oKdNekVDKYPeBLeCs33DttaMaVwzxeHJBfroPZeWwGk");
+const TREASURY_PUBKEY: Pubkey = pubkey!("DW69JZRd1j3Y2DsEhF2biwk3DPdn6BLeG51AFXg18ho2");
 
 declare_id!("AkugdJHDjDvBaxUGC6pjyrfqEpDfJ4Z9Ji9NED6Lmddg");
 
@@ -38,7 +38,7 @@ pub mod token_contract {
         require_keys_eq!(
             ctx.accounts.authority.key(),
             ctx.accounts.security.admin,
-            ErrorCode::Unauthorized
+            ErrorCode::UnauthorizedSigner
         );
         
         ctx.accounts.security.security_txt = new_content;
@@ -72,14 +72,14 @@ pub mod token_contract {
         // Transfer fee to deployer
         let transfer_ix = system_instruction::transfer(
             &ctx.accounts.payer.key(),
-            &DEPLOYER_PUBKEY,
+            &TREASURY_PUBKEY,
             fee_lamports,
         );
         anchor_lang::solana_program::program::invoke(
             &transfer_ix,
             &[
                 ctx.accounts.payer.to_account_info(),
-                ctx.accounts.deployer.to_account_info(),
+                ctx.accounts.treasury.to_account_info(),
                 ctx.accounts.system_program.to_account_info(),
             ],
         )?;
@@ -229,7 +229,7 @@ pub struct UpdateSecurity<'info> {
         mut,
         seeds = [b"program-security"],
         bump,
-        constraint = authority.key() == security.admin @ ErrorCode::Unauthorized // Correct verification
+        constraint = authority.key() == security.admin @ ErrorCode::UnauthorizedSigner
     )]
     pub security: Account<'info, ProgramSecurity>,
     #[account(mut)]
@@ -242,8 +242,13 @@ pub struct UpdateSecurity<'info> {
 pub struct CreateToken<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
-    #[account(mut)]
-    pub deployer: Signer<'info>,
+    
+    /// CHECK: Treasury account not signer
+    #[account(
+        mut,
+        address = TREASURY_PUBKEY @ ErrorCode::UnauthorizedTreasury
+    )]
+    pub treasury: AccountInfo<'info>,
 
     #[account(
         init,
@@ -290,8 +295,10 @@ pub struct ProgramSecurity {
 /// Custom errors
 #[error_code]
 pub enum ErrorCode {
-    #[msg("Unauthorized: Signer does not have admin privileges")]
-    Unauthorized,
+    #[msg("UnauthorizedSigner: Signer does not have admin privileges")]
+    UnauthorizedSigner,
+    #[msg("UnauthorizedTreasury: Treasury account don't match")]
+    UnauthorizedTreasury,
     #[msg("Insufficient funds for transaction")]
     InsufficientFunds,
 }

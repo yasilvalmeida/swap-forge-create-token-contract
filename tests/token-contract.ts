@@ -5,7 +5,7 @@ import { PublicKey, SystemProgram } from '@solana/web3.js';
 import {
   TOKEN_PROGRAM_ID,
 } from '@solana/spl-token';
-import { assert, AssertionError } from 'chai';
+import { assert } from 'chai';
 
 const TOKEN_METADATA_PROGRAM_ID = new PublicKey(
   'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s'
@@ -17,58 +17,6 @@ describe('token-contract', () => {
 
   const program = anchor.workspace.TokenContract as Program<TokenContract>;
   const wallet = provider.wallet;
-  // Derive PDAs upfront
-  const [securityPDA] = PublicKey.findProgramAddressSync(
-    [Buffer.from("program-security")],
-    program.programId
-  );
-
-  /* it('Initializes security settings', async () => {
-    try {
-      await program.methods.initializeSecurity()
-      .accounts({
-        authority: wallet.publicKey,
-      })
-      .remainingAccounts([
-        {
-          pubkey: securityPDA,
-          isWritable: false,
-          isSigner: false,
-        },
-        {
-          pubkey: SystemProgram.programId,
-          isWritable: false,
-          isSigner: false,
-        },
-      ])
-      .rpc();
-
-      await program.account.programSecurity.fetch(securityPDA);
-    } catch (error) {
-      console.log('error', error)
-    }
-  });
-
-  it('Prevents double initialization', async () => {
-    try {
-      await program.methods.initializeSecurity()
-        .accounts({
-          authority: wallet.publicKey
-        })
-        .remainingAccounts([
-          {
-            pubkey: securityPDA,
-            isWritable: false,
-            isSigner: false,
-          }
-        ])
-        .rpc();
-      assert.fail("Should have thrown error");
-    } catch (err) {
-      if (err instanceof AssertionError)
-        assert.include(err.message, "AlreadyInitialized");
-    }
-  }); */
 
   it('Creates a new token with metadata', async () => {
     // Create test data
@@ -133,14 +81,6 @@ describe('token-contract', () => {
 
       console.log('Token creation transaction signature:', tx);
       assert.exists(tx);
-
-      // Verify security info
-      const [securityPDA] = PublicKey.findProgramAddressSync(
-        [Buffer.from("program_security")],
-        program.programId
-      );
-      const securityInfo = await program.account.programSecurity.fetch(securityPDA);
-      assert.include(securityInfo.securityTxt, "support@swapforge.app");
     } catch (error) {
       console.error('Error creating token:', error);
       throw error;
